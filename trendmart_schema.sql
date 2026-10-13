@@ -443,3 +443,22 @@ INSERT INTO SaleItems (transaction_id, product_id, quantity, unit_price)
 SELECT @tid, product_id, 4, price FROM Products WHERE product_name = 'Adidas Ultraboost 23';
 
 SELECT product_id, product_name, is_active, stock_level FROM Products WHERE product_id IN (1, 2);
+
+USE trendmart_db;
+
+-- Step 1: widen the enum so both old and new values are valid simultaneously
+ALTER TABLE Users MODIFY COLUMN role ENUM('Admin','Manager','Staff','SystemAdmin') NOT NULL DEFAULT 'Staff';
+
+-- Step 2: migrate existing data
+UPDATE Users SET role = 'Manager' WHERE role = 'Admin';
+SET SQL_SAFE_UPDATES = 0;
+UPDATE Users SET role = 'Manager' WHERE role = 'Admin';
+SET SQL_SAFE_UPDATES = 1;
+
+SELECT user_id, username, role FROM Users;
+
+-- Step 3: narrow the enum to its final, correct set
+ALTER TABLE Users MODIFY COLUMN role ENUM('SystemAdmin','Manager','Staff') NOT NULL DEFAULT 'Staff';
+
+INSERT INTO Users (username, password_hash, full_name, role, email, assigned_store_id)
+VALUES ('sysadmin', '$2b$12$KueZAe1mb/Kg8lGg2kCAIOYENdsI8FsA8MkKQGx2WkSdZqRifn0ga', 'System Administrator', 'SystemAdmin', 'sysadmin@trendmart.co.za', NULL);

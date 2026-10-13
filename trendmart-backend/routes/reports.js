@@ -3,8 +3,8 @@ const db      = require('../config/db');
 const { protect, requireRole } = require('../middleware/auth');
 const router  = express.Router();
 
-// ── (a) DAILY SALES REPORT — Admin: any store; Staff: own store only ─────────
-router.get('/daily', protect, async (req, res) => {
+// ── (a) DAILY SALES REPORT — Manager: any store; Staff: own store only ─────────
+router.get('/daily', protect, requireRole('Manager', 'Staff'), async (req, res) => {
   const date = req.query.date || new Date().toISOString().slice(0, 10);
   try {
     let query = `
@@ -32,8 +32,8 @@ router.get('/daily', protect, async (req, res) => {
   }
 });
 
-// ── (b) BEST-SELLING PRODUCTS REPORT (Admin only) ────────────────────────────
-router.get('/best-sellers', protect, requireRole('Admin'), async (req, res) => {
+// ── (b) BEST-SELLING PRODUCTS REPORT (Manager only) ────────────────────────────
+router.get('/best-sellers', protect, requireRole('Manager'), async (req, res) => {
   const { start_date, end_date } = req.query;
   if (!start_date || !end_date)
     return res.status(400).json({ message: 'start_date and end_date are required.' });
@@ -57,10 +57,10 @@ router.get('/best-sellers', protect, requireRole('Admin'), async (req, res) => {
   }
 });
 
-// ── (c) STORE PERFORMANCE REPORT (Admin only) ────────────────────────────────
+// ── (c) STORE PERFORMANCE REPORT (Manager only) ────────────────────────────────
 // Uses the composite index idx_st_store_date from Part 3 — this is the query
 // that index was purpose-built for.
-router.get('/store-performance', protect, requireRole('Admin'), async (req, res) => {
+router.get('/store-performance', protect, requireRole('Manager'), async (req, res) => {
   const { start_date, end_date } = req.query;
   if (!start_date || !end_date)
     return res.status(400).json({ message: 'start_date and end_date are required.' });
@@ -86,8 +86,8 @@ router.get('/store-performance', protect, requireRole('Admin'), async (req, res)
   }
 });
 
-// ── DASHBOARD (FR-08) — Admin only ────────────────────────────────────────────
-router.get('/dashboard', protect, requireRole('Admin'), async (req, res) => {
+// ── DASHBOARD (FR-08) — Manager only ────────────────────────────────────────────
+router.get('/dashboard', protect, requireRole('Manager'), async (req, res) => {
   try {
     const [[todayRevenue]] = await db.execute(
       `SELECT COALESCE(SUM(total_amount),0) AS revenue, COUNT(*) AS tx_count
@@ -133,12 +133,12 @@ router.get('/dashboard', protect, requireRole('Admin'), async (req, res) => {
   }
 });
 
-// ── ADVANCED ANALYTICS (FR-08 / SC-08) — Admin only ──────────────────────────
+// ── ADVANCED ANALYTICS (FR-08 / SC-08) — Manager only ──────────────────────────
 // Powers: 30-day trend, week-on-week %, category breakdown, a simple moving-
 // average forecast, and a profit-margin table using an estimated 55% COGS
 // (Phase 2 does not track real cost price, so this is documented as an
 // estimate, not an accounting figure — call this out in your final report).
-router.get('/analytics', protect, requireRole('Admin'), async (req, res) => {
+router.get('/analytics', protect, requireRole('Manager'), async (req, res) => {
   try {
     const [thirtyDayTrend] = await db.execute(
       `SELECT DATE(transaction_date) AS day, COALESCE(SUM(total_amount),0) AS revenue

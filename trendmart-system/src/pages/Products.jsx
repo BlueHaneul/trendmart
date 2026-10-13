@@ -6,7 +6,7 @@ import { EmptyState } from '../components/EmptyState';
 import { COLORS, Btn, Input, Field, Modal, Toast, Badge, fmtCurrency } from '../components/ui';
 
 export default function Products() {
-  const { isAdmin } = useAuth();
+  const { isManager } = useAuth();
   const [products, setProducts] = useState([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState(null);
@@ -53,19 +53,19 @@ export default function Products() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <h1 style={{ color: COLORS.text, fontSize: 22, fontWeight: 800, margin: 0 }}>Products</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          {isAdmin && (
+          {isManager && (
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: COLORS.muted, fontSize: 13, cursor: 'pointer' }}>
               <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} />
               Show Inactive
             </label>
           )}
-          {isAdmin && <Btn onClick={() => setForm({ min_stock_level: 10 })}>Add Product</Btn>}
+          {isManager && <Btn onClick={() => setForm({ min_stock_level: 10 })}>Add Product</Btn>}
         </div>
       </div>
 
       {products.length === 0 ? (
         <EmptyState title="No Products Yet" message="No products have been added to the catalogue."
-          action={isAdmin && <Btn onClick={() => setForm({ min_stock_level: 10 })}>Add First Product</Btn>} />
+          action={isManager && <Btn onClick={() => setForm({ min_stock_level: 10 })}>Add First Product</Btn>} />
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
           {products.map((p) => (
@@ -79,7 +79,7 @@ export default function Products() {
               <div style={{ fontSize: 12, color: p.stock_level <= p.min_stock_level ? COLORS.amber : COLORS.muted }}>
                 Stock: {p.stock_level} {p.stock_level <= p.min_stock_level && '⚠ Low'}
               </div>
-              {isAdmin && (
+              {isManager && (
                 <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
                   {p.is_active ? (
                     <>

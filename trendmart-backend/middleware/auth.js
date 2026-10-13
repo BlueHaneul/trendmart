@@ -21,7 +21,7 @@ async function protect(req, res, next) {
   }
 }
 
-// Role guard factory — usage: requireRole('Admin') or requireRole('Admin', 'Staff')
+// Role guard factory — usage: requireRole('Manager')
 function requireRole(...allowedRoles) {
   return (req, res, next) => {
     if (!allowedRoles.includes(req.user?.role)) {
@@ -31,7 +31,4 @@ function requireRole(...allowedRoles) {
   };
 }
 
-// Kept for backward compatibility with v2 route code
-const adminOnly = requireRole('Admin');
-
-module.exports = { protect, requireRole, adminOnly };
+module.exports = { protect, requireRole };

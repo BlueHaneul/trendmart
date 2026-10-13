@@ -72,7 +72,7 @@ function ProductSalesSearch() {
 }
 
 function StorePerformanceView() {
-  const { user, isAdmin } = useAuth();
+  const { user, isManager } = useAuth();
   const [stores, setStores]     = useState(null); // null = loading, not "no stores"
   const [selected, setSelected] = useState(null);
   const [data, setData]         = useState(null);
@@ -86,10 +86,10 @@ function StorePerformanceView() {
     setData({ sales: salesRes.data, daily: dailyRes.data.stores.find((s) => s.store_id === store.store_id) });
   };
 
-  const visibleStores = stores === null ? [] : (isAdmin ? stores : stores.filter((s) => s.store_id === user.assigned_store_id));
+  const visibleStores = stores === null ? [] : (isManager ? stores : stores.filter((s) => s.store_id === user.assigned_store_id));
 
   useEffect(() => {
-    if (!isAdmin && stores !== null && visibleStores.length > 0 && !selected) {
+    if (!isManager && stores !== null && visibleStores.length > 0 && !selected) {
       selectStore(visibleStores[0]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -97,11 +97,11 @@ function StorePerformanceView() {
 
   if (stores === null) return <p style={{ color: COLORS.dim }}>Loading stores...</p>;
   if (stores.length === 0) return <EmptyState title="No Active Stores" message="No active stores available. Contact your Administrator." />;
-  if (!isAdmin && visibleStores.length === 0) return <EmptyState title="No Assigned Store" message="Your account has no assigned store. Contact your Administrator." />;
+  if (!isManager && visibleStores.length === 0) return <EmptyState title="No Assigned Store" message="Your account has no assigned store. Contact your Administrator." />;
 
   return (
     <div>
-      {isAdmin && (
+      {isManager && (
         <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
           {visibleStores.map((s) => (
             <Btn key={s.store_id} variant={selected?.store_id === s.store_id ? 'primary' : 'ghost'} size="sm" onClick={() => selectStore(s)}>{s.store_name}</Btn>

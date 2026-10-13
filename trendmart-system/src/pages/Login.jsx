@@ -22,7 +22,7 @@ export default function Login() {
       const res = await API.post('/auth/login', { username, password, mfa_code: mfaCode || undefined });
       if (res.data.mfa_required) { setMfaRequired(true); setLoading(false); return; }
       login(res.data.token, res.data.user);
-      navigate(res.data.user.role === 'Admin' ? '/dashboard' : '/sales');
+      navigate('/');
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed. Please try again.');
       setLoading(false);

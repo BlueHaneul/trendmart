@@ -4,14 +4,14 @@ const { protect, requireRole } = require('../middleware/auth');
 const { logAction }            = require('../middleware/audit');
 const router  = express.Router();
 
-// ── LIST (Admin: full, Staff: read-only — both roles allowed here) ────────────
-router.get('/', protect, async (req, res) => {
+// ── LIST (Manager: full, Staff: read-only — both roles allowed here) ────────────
+router.get('/', protect, requireRole('Manager', 'Staff'), async (req, res) => {
   try {
     let query = 'SELECT * FROM Products WHERE 1=1';
     const params = [];
 
-    // Staff and Admin both see only active products by default; ?include_inactive=1
-    // (Admin-only in the UI) reveals deactivated stock for re-activation.
+    // Staff and Manager both see only active products by default; ?include_inactive=1
+    // (Manager-only in the UI) reveals deactivated stock for re-activation.
     if (req.query.include_inactive !== '1') { query += ' AND is_active = 1'; }
     if (req.query.category) { query += ' AND category = ?'; params.push(req.query.category); }
     if (req.query.low_stock === '1') { query += ' AND stock_level <= min_stock_level'; }
@@ -25,7 +25,7 @@ router.get('/', protect, async (req, res) => {
 });
 
 // ── GET ONE ─────────────────────────────────────────────────────────────────
-router.get('/:id', protect, async (req, res) => {
+router.get('/:id', protect, requireRole('Manager', 'Staff'), async (req, res) => {
   try {
     const [rows] = await db.execute('SELECT * FROM Products WHERE product_id = ?', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ message: 'Product not found.' });
@@ -35,8 +35,8 @@ router.get('/:id', protect, async (req, res) => {
   }
 });
 
-// ── CREATE (Admin only) ────────────────────────────────────────────────────
-router.post('/', protect, requireRole('Admin'), async (req, res) => {
+// ── CREATE (Manager only) ────────────────────────────────────────────────────
+router.post('/', protect, requireRole('Manager'), async (req, res) => {
   const { product_name, category, price, stock_level, min_stock_level } = req.body;
 
   // Testable requirement (mirrors NFR validation style used in sales.js):
@@ -60,8 +60,8 @@ router.post('/', protect, requireRole('Admin'), async (req, res) => {
   }
 });
 
-// ── UPDATE (Admin only) ────────────────────────────────────────────────────
-router.put('/:id', protect, requireRole('Admin'), async (req, res) => {
+// ── UPDATE (Manager only) ────────────────────────────────────────────────────
+router.put('/:id', protect, requireRole('Manager'), async (req, res) => {
   const { product_name, category, price, stock_level, min_stock_level } = req.body;
   if (price != null && price < 0)
     return res.status(400).json({ message: 'price cannot be negative.' });
@@ -89,11 +89,11 @@ router.put('/:id', protect, requireRole('Admin'), async (req, res) => {
   }
 });
 
-// ── DEACTIVATE (Admin only — soft delete, never a hard DELETE) ────────────────
+// ── DEACTIVATE (Manager only — soft delete, never a hard DELETE) ────────────────
 // Products are never hard-deleted: SaleItems has ON DELETE RESTRICT against
 // product_id, so a hard delete would be blocked anyway once a sale exists.
 // Soft delete also preserves historical report accuracy (Part 12 — Data Lifecycle).
-router.delete('/:id', protect, requireRole('Admin'), async (req, res) => {
+router.delete('/:id', protect, requireRole('Manager'), async (req, res) => {
   try {
     const [result] = await db.execute('UPDATE Products SET is_active = 0 WHERE product_id = ?', [req.params.id]);
     if (result.affectedRows === 0) return res.status(404).json({ message: 'Product not found.' });
@@ -106,8 +106,8 @@ router.delete('/:id', protect, requireRole('Admin'), async (req, res) => {
   }
 });
 
-// ── REACTIVATE (Admin only) — the counterpart to the soft-delete above ────────
-router.patch('/:id/activate', protect, requireRole('Admin'), async (req, res) => {
+// ── REACTIVATE (Manager only) — the counterpart to the soft-delete above ────────
+router.patch('/:id/activate', protect, requireRole('Manager'), async (req, res) => {
   try {
     const [result] = await db.execute('UPDATE Products SET is_active = 1 WHERE product_id = ?', [req.params.id]);
     if (result.affectedRows === 0) return res.status(404).json({ message: 'Product not found.' });

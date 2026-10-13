@@ -31,10 +31,14 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, updateUser, isAdmin: user?.role === 'Admin' }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  <AuthContext.Provider value={{
+    user, login, logout, updateUser,
+    isManager: user?.role === 'Manager',
+    isSystemAdmin: user?.role === 'SystemAdmin',
+  }}>
+    {children}
+  </AuthContext.Provider>
+);
 }
 
 export const useAuth = () => useContext(AuthContext);

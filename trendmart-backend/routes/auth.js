@@ -102,7 +102,7 @@ router.post('/mfa/verify', protect, async (req, res) => {
 });
 
 // ── REGISTER (Admin creates accounts — FR-01 extension) ───────────────────────
-router.post('/register', protect, requireRoleInline('Admin'), async (req, res) => {
+router.post('/register', protect, requireRoleInline('SystemAdmin'), async (req, res) => {
   const { username, password, full_name, role, email, phone, assigned_store_id } = req.body;
   if (!username || !password || !full_name)
     return res.status(400).json({ message: 'Username, password, and full name are required.' });
@@ -129,20 +129,6 @@ router.post('/register', protect, requireRoleInline('Admin'), async (req, res) =
   }
 });
 
-// CORRECT — soft delete
-router.delete('/users/:id', protect, requireRole('Admin'), async (req, res) => {
-  await db.execute(
-    'UPDATE Users SET is_active = 0, mfa_secret = NULL, mfa_enabled = 0 WHERE user_id = ?',
-    [req.params.id]
-  );
-  await db.execute(
-    "INSERT INTO AuditLog (user_id, action, target_type, target_id, result) VALUES (?,?,?,?,?)",
-    [req.user.user_id, 'DEACTIVATE_USER', 'User', req.params.id, 'SUCCESS']
-  );
-  res.json({ message: 'User deactivated. Record retained for audit compliance.' });
-});
-
-
 // Inline role check kept local to this file to avoid a circular require with middleware/auth.js
 function requireRoleInline(role) {
   return (req, res, next) => {
@@ -151,5 +137,59 @@ function requireRoleInline(role) {
   };
 }
 
+// ── LIST USERS (SystemAdmin only) — powers the User Management screen ────────
+router.get('/users', protect, requireRoleInline('SystemAdmin'), async (req, res) => {
+  const [rows] = await db.execute(
+    `SELECT user_id, username, full_name, role, email, assigned_store_id, is_active, mfa_enabled, last_login
+     FROM Users ORDER BY full_name`
+  );
+  res.json(rows);
+});
+
+// ── RESET PASSWORD (SystemAdmin only) ─────────────────────────────────────────
+router.put('/users/:id/password', protect, requireRoleInline('SystemAdmin'), async (req, res) => {
+  const { new_password } = req.body;
+  const strongPassword = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+  if (!strongPassword.test(new_password))
+    return res.status(400).json({ message: 'Password must be at least 8 characters with uppercase, lowercase, number, and special character.' });
+
+  try {
+    const password_hash = await bcrypt.hash(new_password, 12);
+    const [result] = await db.execute('UPDATE Users SET password_hash = ? WHERE user_id = ?', [password_hash, req.params.id]);
+    if (result.affectedRows === 0) return res.status(404).json({ message: 'User not found.' });
+
+    await logAction(req, { userId: req.user.user_id, action: 'RESET_PASSWORD', targetType: 'User', targetId: req.params.id, result: 'SUCCESS' });
+    res.json({ message: 'Password reset successfully.' });
+  } catch (err) {
+    res.status(500).json({ message: 'Could not reset password.' });
+  }
+});
+
+// ── DEACTIVATE / REACTIVATE USER (SystemAdmin only) ───────────────────────────
+router.delete('/users/:id', protect, requireRoleInline('SystemAdmin'), async (req, res) => {
+  // Guard: prevent a SystemAdmin from locking themselves out
+  if (Number(req.params.id) === req.user.user_id)
+    return res.status(400).json({ message: 'You cannot deactivate your own account.' });
+
+  const [result] = await db.execute('UPDATE Users SET is_active = 0, mfa_secret = NULL, mfa_enabled = 0 WHERE user_id = ?', [req.params.id]);
+  if (result.affectedRows === 0) return res.status(404).json({ message: 'User not found.' });
+  await logAction(req, { userId: req.user.user_id, action: 'DEACTIVATE_USER', targetType: 'User', targetId: req.params.id, result: 'SUCCESS' });
+  res.json({ message: 'User deactivated.' });
+});
+
+router.patch('/users/:id/activate', protect, requireRoleInline('SystemAdmin'), async (req, res) => {
+  const [result] = await db.execute('UPDATE Users SET is_active = 1 WHERE user_id = ?', [req.params.id]);
+  if (result.affectedRows === 0) return res.status(404).json({ message: 'User not found.' });
+  await logAction(req, { userId: req.user.user_id, action: 'REACTIVATE_USER', targetType: 'User', targetId: req.params.id, result: 'SUCCESS' });
+  res.json({ message: 'User reactivated.' });
+});
+
+// ── STORE LOOKUP FOR USER PROVISIONING (SystemAdmin only) ─────────────────────
+// Minimal reference data (id + name only) so a SystemAdmin can assign Staff to a
+// store without being granted access to the full Stores business route.
+router.get('/store-options', protect, requireRoleInline('SystemAdmin'), async (req, res) => {
+  const [rows] = await db.execute('SELECT store_id, store_name FROM Stores WHERE is_active = 1 ORDER BY store_name');
+  res.json(rows);
+});
 
 module.exports = router;

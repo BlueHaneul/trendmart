@@ -4,23 +4,24 @@ import { useAuth } from '../context/AuthContext';
 import { Icon, COLORS } from './ui';
 
 const NAV_ITEMS = [
-  { to: '/dashboard', label: 'Dashboard', icon: 'dashboard', adminOnly: true },
-  { to: '/sales', label: 'Sales Transactions', icon: 'sales' },
-  { to: '/products', label: 'Products', icon: 'products' },
-  { to: '/stores', label: 'Stores', icon: 'stores', adminOnly: true },
-  { to: '/enquiry', label: 'Enquiry', icon: 'search' },
-  { to: '/reports', label: 'Reports', icon: 'reports' },
-  { to: '/analytics', label: 'Advanced Analytics', icon: 'analytics', adminOnly: true },
-  { to: '/security', label: 'Security', icon: 'security', adminOnly: true },
+  { to: '/dashboard', label: 'Dashboard', icon: 'dashboard', roles: ['Manager'] },
+  { to: '/sales', label: 'Sales Transactions', icon: 'sales', roles: ['Manager', 'Staff'] },
+  { to: '/products', label: 'Products', icon: 'products', roles: ['Manager', 'Staff'] },
+  { to: '/stores', label: 'Stores', icon: 'stores', roles: ['Manager'] },
+  { to: '/enquiry', label: 'Enquiry', icon: 'search', roles: ['Manager', 'Staff'] },
+  { to: '/reports', label: 'Reports', icon: 'reports', roles: ['Manager', 'Staff'] },
+  { to: '/analytics', label: 'Advanced Analytics', icon: 'analytics', roles: ['Manager'] },
+  { to: '/users', label: 'User Management', icon: 'users', roles: ['SystemAdmin'] },
+  { to: '/security', label: 'Security', icon: 'security', roles: ['Manager', 'SystemAdmin'] },
 ];
 
 export function Sidebar() {
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout} = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(true);
 
   if (!user) return null;
-  const items = NAV_ITEMS.filter((n) => !n.adminOnly || isAdmin);
+  const items = NAV_ITEMS.filter((n) => n.roles.includes(user.role));
 
   return (
     <aside style={{ width: open ? 240 : 68, background: COLORS.card, borderRight: `1px solid ${COLORS.border}`, display: 'flex', flexDirection: 'column', transition: 'width 0.25s ease', overflow: 'hidden', flexShrink: 0 }}>

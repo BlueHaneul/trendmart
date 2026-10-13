@@ -6,19 +6,19 @@ import { ErrorState } from '../components/ErrorState';
 import { COLORS, Btn, Input, fmtCurrency } from '../components/ui';
 
 export default function Reports() {
-  const { isAdmin } = useAuth();
+  const { isManager } = useAuth();
   const [tab, setTab] = useState('daily');
   return (
     <div>
       <h1 style={{ color: COLORS.text, fontSize: 22, fontWeight: 800, marginBottom: 20 }}>Reports</h1>
       <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
         <Btn variant={tab === 'daily' ? 'primary' : 'ghost'} size="sm" onClick={() => setTab('daily')}>Daily Sales</Btn>
-        {isAdmin && <Btn variant={tab === 'best-sellers' ? 'primary' : 'ghost'} size="sm" onClick={() => setTab('best-sellers')}>Best Sellers</Btn>}
-        {isAdmin && <Btn variant={tab === 'store-performance' ? 'primary' : 'ghost'} size="sm" onClick={() => setTab('store-performance')}>Store Performance</Btn>}
+        {isManager && <Btn variant={tab === 'best-sellers' ? 'primary' : 'ghost'} size="sm" onClick={() => setTab('best-sellers')}>Best Sellers</Btn>}
+        {isManager && <Btn variant={tab === 'store-performance' ? 'primary' : 'ghost'} size="sm" onClick={() => setTab('store-performance')}>Store Performance</Btn>}
       </div>
       {tab === 'daily' && <DailyReport />}
-      {tab === 'best-sellers' && isAdmin && <RangeReport endpoint="best-sellers" columns={['product_name', 'category', 'units_sold', 'total_revenue']} />}
-      {tab === 'store-performance' && isAdmin && <RangeReport endpoint="store-performance" columns={['store_name', 'transaction_count', 'total_revenue', 'avg_transaction_value']} />}
+      {tab === 'best-sellers' && isManager && <RangeReport endpoint="best-sellers" columns={['product_name', 'category', 'units_sold', 'total_revenue']} />}
+      {tab === 'store-performance' && isManager && <RangeReport endpoint="store-performance" columns={['store_name', 'transaction_count', 'total_revenue', 'avg_transaction_value']} />}
     </div>
   );
 }

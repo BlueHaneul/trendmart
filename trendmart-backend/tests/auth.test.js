@@ -30,12 +30,12 @@ describe('SECURITY: Authentication', () => {
   });
 
   test('ST-09: Registering with a weak password is rejected', async () => {
-    const login = await loginAs('admin', 'admin123');
-    const res = await request(app).post('/api/auth/register')
-      .set('Authorization', `Bearer ${login.body.token}`)
-      .send({ username: 'newstaff', password: 'weak', full_name: 'New Staff' });
-    expect(res.statusCode).toBe(400);
-  });
+  const login = await loginAs('sysadmin', 'sysadmin123');
+  const res = await request(app).post('/api/auth/register')
+    .set('Authorization', `Bearer ${login.body.token}`)
+    .send({ username: 'newstaff', password: 'weak', full_name: 'New Staff', role: 'Staff' });
+  expect(res.statusCode).toBe(400);
+});
 });
 
 describe('RBAC: Role-Permission Mapping (Phase 2 §7.2)', () => {

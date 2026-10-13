@@ -6,7 +6,7 @@ import { EmptyState } from '../components/EmptyState';
 import { COLORS, Btn, Input, Select, Field, Modal, Toast, Badge, fmtCurrency } from '../components/ui';
 
 export default function Sales() {
-  const { user, isAdmin } = useAuth();
+  const { user, isManager } = useAuth();
   const [transactions, setTransactions] = useState([]);
   const [products, setProducts]         = useState([]);
   const [stores, setStores]             = useState([]);
@@ -95,7 +95,7 @@ export default function Sales() {
             <tbody>
               {filtered.map((t) => {
                 const isToday = new Date(t.transaction_date).toDateString() === new Date().toDateString();
-                const canCancel = t.status === 'Completed' && isToday && (isAdmin || t.user_id === user.user_id);
+                const canCancel = t.status === 'Completed' && isToday && (isManager || t.user_id === user.user_id);
                 return (
                   <tr key={t.transaction_id} style={{ color: COLORS.muted, opacity: t.status === 'Cancelled' ? 0.5 : 1, borderBottom: `1px solid ${COLORS.border}` }}>
                     <td style={{ padding: '10px 16px' }}>{t.transaction_id}</td>
@@ -121,7 +121,7 @@ export default function Sales() {
             {saleError && <div style={{ background: COLORS.rose + '18', border: `1px solid ${COLORS.rose}40`, color: COLORS.rose, fontSize: 13, padding: '10px 14px', borderRadius: 8, marginBottom: 16 }}>{saleError}</div>}
 
             <Field label="Store" required>
-              {isAdmin ? (
+              {isManager ? (
                 <Select required value={saleForm.store_id} onChange={(e) => setSaleForm({ ...saleForm, store_id: e.target.value })}>
                   <option value="">Select store</option>
                   {stores.map((s) => <option key={s.store_id} value={s.store_id}>{s.store_name}</option>)}

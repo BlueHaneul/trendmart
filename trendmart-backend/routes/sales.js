@@ -1,11 +1,11 @@
 const express = require('express');
 const db      = require('../config/db');
-const { protect } = require('../middleware/auth');
+const { protect, requireRole } = require('../middleware/auth');
 const { logAction } = require('../middleware/audit');
 const router  = express.Router();
 
 // ── LIST / FILTER (FR-07) ──────────────────────────────────────────────────
-router.get('/', protect, async (req, res) => {
+router.get('/', protect , requireRole('Manager', 'Staff'), async (req, res) => {
   try {
     let query = `
       SELECT t.transaction_id, t.transaction_date, t.total_amount, t.status,
@@ -27,7 +27,7 @@ router.get('/', protect, async (req, res) => {
       query += ' AND t.store_id = ?';
       params.push(req.user.assigned_store_id);
     } else if (req.query.store_id) {
-      // Admin may optionally filter to a specific store too
+      // Manager may optionally filter to a specific store too
       query += ' AND t.store_id = ?';
       params.push(req.query.store_id);
     }
@@ -44,7 +44,7 @@ router.get('/', protect, async (req, res) => {
 });
 
 // ── RECORD SALE (FR-03) — ACID transaction ─────────────────────────────────
-router.post('/', protect, async (req, res) => {
+router.post('/', protect , requireRole('Manager', 'Staff'), async (req, res) => {
   const { store_id, product_id, quantity } = req.body;
 
   // Input validation — testable requirement: quantity must be a positive integer
@@ -102,7 +102,7 @@ router.post('/', protect, async (req, res) => {
 });
 
 // ── CANCEL TODAY'S TRANSACTION — ACID transaction (restores stock) ─────────
-router.put('/:id/cancel', protect, async (req, res) => {
+router.put('/:id/cancel', protect, requireRole('Manager', 'Staff'), async (req, res) => {
   const conn = await db.getConnection();
   try {
     await conn.beginTransaction();

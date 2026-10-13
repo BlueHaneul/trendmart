@@ -5,7 +5,7 @@ const { logAction }            = require('../middleware/audit');
 const router  = express.Router();
 
 // ── LIST (both roles) ───────────────────────────────────────────────────────
-router.get('/', protect, async (req, res) => {
+router.get('/', protect, requireRole('Manager', 'Staff'), async (req, res) => {
   try {
     let query = 'SELECT * FROM Stores WHERE 1=1';
     if (req.query.include_inactive !== '1') query += ' AND is_active = 1';
@@ -17,7 +17,7 @@ router.get('/', protect, async (req, res) => {
   }
 });
 
-router.get('/:id', protect, async (req, res) => {
+router.get('/:id', protect, requireRole('Manager', 'Staff'), async (req, res) => {
   try {
     const [rows] = await db.execute('SELECT * FROM Stores WHERE store_id = ?', [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ message: 'Store not found.' });
@@ -27,8 +27,8 @@ router.get('/:id', protect, async (req, res) => {
   }
 });
 
-// ── CREATE (Admin only) ─────────────────────────────────────────────────────
-router.post('/', protect, requireRole('Admin'), async (req, res) => {
+// ── CREATE (Manager only) ─────────────────────────────────────────────────────
+router.post('/', protect, requireRole('Manager'), async (req, res) => {
   const { store_name, location, manager_name, phone, email, opened_date } = req.body;
   if (!store_name || !location || !manager_name || !opened_date)
     return res.status(400).json({ message: 'store_name, location, manager_name, and opened_date are required.' });
@@ -47,8 +47,8 @@ router.post('/', protect, requireRole('Admin'), async (req, res) => {
   }
 });
 
-// ── UPDATE (Admin only) ─────────────────────────────────────────────────────
-router.put('/:id', protect, requireRole('Admin'), async (req, res) => {
+// ── UPDATE (Manager only) ─────────────────────────────────────────────────────
+router.put('/:id', protect, requireRole('Manager'), async (req, res) => {
   const { store_name, location, manager_name, phone, email } = req.body;
   try {
     const [result] = await db.execute(
@@ -71,10 +71,10 @@ router.put('/:id', protect, requireRole('Admin'), async (req, res) => {
   }
 });
 
-// ── DEACTIVATE (Admin only — soft delete) ──────────────────────────────────
+// ── DEACTIVATE (Manager only — soft delete) ──────────────────────────────────
 // SaleTransactions has ON DELETE RESTRICT against store_id — a hard delete on
 // a store with sales history would fail anyway, so deactivation is correct here.
-router.delete('/:id', protect, requireRole('Admin'), async (req, res) => {
+router.delete('/:id', protect, requireRole('Manager'), async (req, res) => {
   try {
     const [result] = await db.execute('UPDATE Stores SET is_active = 0 WHERE store_id = ?', [req.params.id]);
     if (result.affectedRows === 0) return res.status(404).json({ message: 'Store not found.' });
