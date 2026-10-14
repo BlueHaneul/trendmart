@@ -6,22 +6,22 @@ import { ErrorState } from '../components/ErrorState';
 import { COLORS, Btn, Input, fmtCurrency } from '../components/ui';
 import { downloadCsv } from '../utils/exportCsv';
 
-// One definition per report, shared by the on-screen table and the exports,
+// One definition per report, shared by the on-screen table and both exports,
 // so what you see and what you download can never drift apart.
 const DAILY_COLUMNS = [
   { key: 'store_name', label: 'Store' },
-  { key: 'transaction_count', label: 'Transactions' },
+  { key: 'transaction_count', label: 'Transactions', numeric: true },
   { key: 'total_revenue', label: 'Revenue (R)', currency: true },
 ];
 const BEST_SELLER_COLUMNS = [
   { key: 'product_name', label: 'Product' },
   { key: 'category', label: 'Category' },
-  { key: 'units_sold', label: 'Units Sold' },
+  { key: 'units_sold', label: 'Units Sold', numeric: true },
   { key: 'total_revenue', label: 'Revenue (R)', currency: true },
 ];
 const STORE_PERFORMANCE_COLUMNS = [
   { key: 'store_name', label: 'Store' },
-  { key: 'transaction_count', label: 'Transactions' },
+  { key: 'transaction_count', label: 'Transactions', numeric: true },
   { key: 'total_revenue', label: 'Revenue (R)', currency: true },
   { key: 'avg_transaction_value', label: 'Avg Transaction Value (R)', currency: true },
 ];
@@ -43,8 +43,12 @@ export default function Reports() {
         {isManager && <Btn variant={tab === 'store-performance' ? 'primary' : 'ghost'} size="sm" onClick={() => setTab('store-performance')}>Store Performance</Btn>}
       </div>
       {tab === 'daily' && <DailyReport />}
-      {tab === 'best-sellers' && isManager && <RangeReport endpoint="best-sellers" columns={BEST_SELLER_COLUMNS} activityKey="units_sold" />}
-      {tab === 'store-performance' && isManager && <RangeReport endpoint="store-performance" columns={STORE_PERFORMANCE_COLUMNS} activityKey="transaction_count" />}
+      {tab === 'best-sellers' && isManager && (
+        <RangeReport endpoint="best-sellers" title="Best Selling Products Report" columns={BEST_SELLER_COLUMNS} activityKey="units_sold" />
+      )}
+      {tab === 'store-performance' && isManager && (
+        <RangeReport endpoint="store-performance" title="Store Performance Report" columns={STORE_PERFORMANCE_COLUMNS} activityKey="transaction_count" />
+      )}
     </div>
   );
 }
@@ -67,6 +71,7 @@ const Table = ({ columns, rows }) => (
 );
 
 function DailyReport() {
+  const { user } = useAuth();
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -78,6 +83,25 @@ function DailyReport() {
 
   const hasData = data && hasActivity(data.stores, 'transaction_count');
 
+  // The PDF library is loaded only when this is clicked, so it never slows down or
+  // endangers the rest of the page; any failure shows as a normal error message.
+  const exportPdf = async () => {
+    try {
+      const { downloadPdf } = await import('../utils/exportPdf');
+      downloadPdf({
+        filename: `daily-sales_${data.date}.pdf`,
+        title: 'Daily Sales Report',
+        subtitle: `Date: ${data.date}`,
+        columns: DAILY_COLUMNS,
+        rows: data.stores,
+        generatedBy: user,
+      });
+    } catch (err) {
+      console.error(err);
+      setError('Could not generate the PDF. Please try again.');
+    }
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
@@ -85,9 +109,10 @@ function DailyReport() {
         <Btn onClick={run}>Run Report</Btn>
         {/* Uses data.date (the date that was actually run), not the input, which may have changed since */}
         {hasData && (
-          <Btn variant="ghost" onClick={() => downloadCsv(`daily-sales_${data.date}.csv`, DAILY_COLUMNS, data.stores)}>
-            Export CSV
-          </Btn>
+          <>
+            <Btn variant="ghost" onClick={() => downloadCsv(`daily-sales_${data.date}.csv`, DAILY_COLUMNS, data.stores)}>Export CSV</Btn>
+            <Btn variant="ghost" onClick={exportPdf}>Export PDF</Btn>
+          </>
         )}
       </div>
       {error && <ErrorState message={error} />}
@@ -98,7 +123,8 @@ function DailyReport() {
   );
 }
 
-function RangeReport({ endpoint, columns, activityKey }) {
+function RangeReport({ endpoint, title, columns, activityKey }) {
+  const { user } = useAuth();
   const [start, setStart]   = useState('');
   const [end, setEnd]       = useState('');
   const [result, setResult] = useState(null); // { rows, start, end }, the range that was actually run
@@ -114,6 +140,23 @@ function RangeReport({ endpoint, columns, activityKey }) {
 
   const hasData = result && hasActivity(result.rows, activityKey);
 
+  const exportPdf = async () => {
+    try {
+      const { downloadPdf } = await import('../utils/exportPdf');
+      downloadPdf({
+        filename: `${endpoint}_${result.start}_to_${result.end}.pdf`,
+        title,
+        subtitle: `Period: ${result.start} to ${result.end}`,
+        columns,
+        rows: result.rows,
+        generatedBy: user,
+      });
+    } catch (err) {
+      console.error(err);
+      setError('Could not generate the PDF. Please try again.');
+    }
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
@@ -121,9 +164,10 @@ function RangeReport({ endpoint, columns, activityKey }) {
         <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
         <Btn onClick={run}>Run Report</Btn>
         {hasData && (
-          <Btn variant="ghost" onClick={() => downloadCsv(`${endpoint}_${result.start}_to_${result.end}.csv`, columns, result.rows)}>
-            Export CSV
-          </Btn>
+          <>
+            <Btn variant="ghost" onClick={() => downloadCsv(`${endpoint}_${result.start}_to_${result.end}.csv`, columns, result.rows)}>Export CSV</Btn>
+            <Btn variant="ghost" onClick={exportPdf}>Export PDF</Btn>
+          </>
         )}
       </div>
       {error && <ErrorState message={error} />}
