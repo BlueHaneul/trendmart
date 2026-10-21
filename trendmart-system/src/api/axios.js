@@ -1,6 +1,10 @@
 import axios from 'axios';
 
-const API = axios.create({ baseURL: import.meta.env.VITE_API_URL });
+const API = axios.create({
+  // Use the configured URL if set; otherwise call the backend on whichever host served this page,
+  // so the same build works on localhost and when opened from another device via the LAN IP.
+  baseURL: import.meta.env.VITE_API_URL || `http://${window.location.hostname}:5000/api`,
+});
 
 // Attach the JWT to every outgoing request
 API.interceptors.request.use((config) => {

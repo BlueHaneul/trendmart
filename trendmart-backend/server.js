@@ -13,7 +13,11 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(cors({ origin: 'http://localhost:5173' }));
+// Allowed browser origins come from .env so the system can be opened from other devices on the
+// same network without editing code. Comma-separated, each exactly as typed in the address bar.
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
+  .split(',').map((origin) => origin.trim()).filter(Boolean);
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json({ limit: '10kb' })); // Prevent oversized payloads
 
 app.use('/api/auth',     require('./routes/auth'));
