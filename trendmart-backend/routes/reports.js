@@ -214,4 +214,71 @@ router.get('/analytics', protect, requireRole('Manager'), async (req, res) => {
   }
 });
 
+// ── REORDER RECOMMENDATIONS (FR-08 decision support) — Manager only ───────────
+// Business rules, named so they can be tuned in one place and cited in the report:
+const LOOKBACK_DAYS     = 30; // window used to measure how fast each product sells
+const REORDER_NOW_DAYS  = 7;  // stock covers this many days of sales, or fewer -> "Reorder now"
+const REORDER_SOON_DAYS = 14; // ...or fewer -> "Reorder soon"; anything above is "Healthy"
+const COVER_DAYS        = 30; // the suggested quantity restores this many days of cover
+
+const STATUS_RANK = { 'Reorder now': 0, 'Reorder soon': 1, 'Healthy': 2, 'No recent sales': 3 };
+
+router.get('/reorder-recommendations', protect, requireRole('Manager'), async (req, res) => {
+  try {
+    // LOOKBACK_DAYS is a constant defined above, not user input, so it is safe inside the SQL text.
+    const [rows] = await db.execute(
+      `SELECT p.product_id, p.product_name, p.category, p.stock_level,
+              COALESCE(s.units_sold, 0) AS units_sold
+       FROM Products p
+       LEFT JOIN (
+         SELECT i.product_id, SUM(i.quantity) AS units_sold
+         FROM SaleItems i
+         JOIN SaleTransactions t ON t.transaction_id = i.transaction_id
+         WHERE t.status = 'Completed'
+           AND t.transaction_date >= DATE_SUB(CURDATE(), INTERVAL ${LOOKBACK_DAYS - 1} DAY)
+         GROUP BY i.product_id
+       ) s ON s.product_id = p.product_id
+       WHERE p.is_active = 1`
+    );
+
+    const items = rows
+      .map((r) => {
+        const stock = Number(r.stock_level);
+        const unitsSold = Number(r.units_sold);
+
+        let status, daysLeft = null, suggested = 0;
+        if (unitsSold === 0) {
+          status = 'No recent sales'; // no sales velocity, so days-until-stockout cannot be estimated
+        } else {
+          daysLeft = (stock * LOOKBACK_DAYS) / unitsSold; // stock / (units per day)
+          status = daysLeft <= REORDER_NOW_DAYS ? 'Reorder now'
+                 : daysLeft <= REORDER_SOON_DAYS ? 'Reorder soon' : 'Healthy';
+          if (status !== 'Healthy') {
+            suggested = Math.max(0, Math.ceil((unitsSold * COVER_DAYS) / LOOKBACK_DAYS) - stock);
+          }
+        }
+
+        return {
+          product_id: r.product_id, product_name: r.product_name, category: r.category,
+          stock_level: stock, units_sold: unitsSold,
+          avg_daily_sales: Math.round((unitsSold / LOOKBACK_DAYS) * 100) / 100,
+          days_left: daysLeft === null ? null : Math.round(daysLeft * 10) / 10,
+          status, suggested_reorder_qty: suggested,
+          _sort: daysLeft ?? 0,
+        };
+      })
+      // Most urgent first: by status, then fewest days of stock left
+      .sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || a._sort - b._sort)
+      .map(({ _sort, ...item }) => item);
+
+    res.json({
+      lookback_days: LOOKBACK_DAYS,
+      thresholds: { reorder_now_days: REORDER_NOW_DAYS, reorder_soon_days: REORDER_SOON_DAYS, cover_days: COVER_DAYS },
+      items,
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Could not generate reorder recommendations.' });
+  }
+});
+
 module.exports = router;

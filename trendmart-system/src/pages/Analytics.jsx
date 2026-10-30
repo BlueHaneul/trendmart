@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import API from '../api/axios';
 import { ErrorState } from '../components/ErrorState';
 import { EmptyState } from '../components/EmptyState';
+import ReorderPanel from '../components/ReorderPanel';
 import { COLORS, KpiCard, MiniBarChart, shortDate, fmtCurrency } from '../components/ui';
 
 export default function Analytics() {
@@ -15,25 +16,49 @@ export default function Analytics() {
   };
   useEffect(load, []);
 
-  if (loading) return <div style={{ color: COLORS.muted, padding: 32 }}>Loading analytics...</div>;
-  if (error)   return <ErrorState message={error} onRetry={load} />;
-  if (data.insufficient_data) return <EmptyState title="Not Enough Data" message={data.message} />;
-
-  const trendLabels = data.thirty_day_trend.map((d) => shortDate(d.day));
-  const trendValues = data.thirty_day_trend.map((d) => Number(d.revenue));
-  const wowPositive = data.week_on_week_change_percent >= 0;
+  // The KPI row needs the trend data, which only exists once there are 7+ days of sales history.
+  const trendsReady = data && !data.insufficient_data;
 
   return (
     <div style={{ display: 'grid', gap: 20 }}>
       <h1 style={{ color: COLORS.text, fontSize: 22, fontWeight: 800, margin: 0 }}>Advanced Analytics</h1>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-        <KpiCard label="30-Day Revenue" value={fmtCurrency(data.thirty_day_revenue)} color={COLORS.cyan} />
-        <KpiCard label="Daily Average" value={fmtCurrency(data.daily_average_revenue)} color={COLORS.blue} />
-        <KpiCard label="Week-on-Week" value={data.week_on_week_change_percent === null ? 'N/A' : `${data.week_on_week_change_percent.toFixed(1)}%`} color={wowPositive ? COLORS.emerald : COLORS.rose} />
-        <KpiCard label="Avg Profit Margin" value={`${(data.profit_margins.reduce((s, p) => s + p.margin_percent, 0) / data.profit_margins.length).toFixed(1)}%`} color={COLORS.violet} />
-      </div>
+      {trendsReady && <KpiRow data={data} />}
 
+      {/* Decision support works from stock and recent sales, so it never waits for the trend history */}
+      <ReorderPanel />
+
+      {loading ? (
+        <div style={{ color: COLORS.muted, padding: 32 }}>Loading analytics...</div>
+      ) : error ? (
+        <ErrorState message={error} onRetry={load} />
+      ) : data.insufficient_data ? (
+        <EmptyState title="Not Enough Data" message={data.message} />
+      ) : (
+        <TrendSections data={data} />
+      )}
+    </div>
+  );
+}
+
+function KpiRow({ data }) {
+  const wowPositive = data.week_on_week_change_percent >= 0;
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+      <KpiCard label="30-Day Revenue" value={fmtCurrency(data.thirty_day_revenue)} color={COLORS.cyan} />
+      <KpiCard label="Daily Average" value={fmtCurrency(data.daily_average_revenue)} color={COLORS.blue} />
+      <KpiCard label="Week-on-Week" value={data.week_on_week_change_percent === null ? 'N/A' : `${data.week_on_week_change_percent.toFixed(1)}%`} color={wowPositive ? COLORS.emerald : COLORS.rose} />
+      <KpiCard label="Avg Profit Margin" value={`${(data.profit_margins.reduce((s, p) => s + p.margin_percent, 0) / data.profit_margins.length).toFixed(1)}%`} color={COLORS.violet} />
+    </div>
+  );
+}
+
+function TrendSections({ data }) {
+  const trendLabels = data.thirty_day_trend.map((d) => shortDate(d.day));
+  const trendValues = data.thirty_day_trend.map((d) => Number(d.revenue));
+
+  return (
+    <>
       <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 24 }}>
         <h3 style={{ color: COLORS.text, margin: '0 0 16px', fontSize: 15 }}>30-Day Trend</h3>
         <MiniBarChart data={trendValues} labels={trendLabels} color={COLORS.cyan} />
@@ -58,7 +83,7 @@ export default function Analytics() {
           <div style={{ color: COLORS.muted, fontSize: 13, marginBottom: 6 }}>Next 7 days: <span style={{ color: COLORS.text }}>{fmtCurrency(data.forecast.next_7_days)}</span></div>
           <div style={{ color: COLORS.muted, fontSize: 13, marginBottom: 6 }}>Next 14 days: <span style={{ color: COLORS.text }}>{fmtCurrency(data.forecast.next_14_days)}</span></div>
           <div style={{ color: COLORS.muted, fontSize: 13, marginBottom: 10 }}>Next 30 days: <span style={{ color: COLORS.text }}>{fmtCurrency(data.forecast.next_30_days)}</span></div>
-          <p style={{ color: COLORS.dim, fontSize: 11 }}>Based on the 30-day moving average — an estimate, not a statistical forecast.</p>
+          <p style={{ color: COLORS.dim, fontSize: 11 }}>Based on the 30-day moving average. An estimate, not a statistical forecast.</p>
         </div>
       </div>
 
@@ -84,6 +109,6 @@ export default function Analytics() {
           ))}</tbody>
         </table>
       </div>
-    </div>
+    </>
   );
 }

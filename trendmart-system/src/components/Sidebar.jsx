@@ -24,7 +24,7 @@ export function Sidebar() {
   const items = NAV_ITEMS.filter((n) => n.roles.includes(user.role));
 
   return (
-    <aside style={{ width: open ? 240 : 68, background: COLORS.card, borderRight: `1px solid ${COLORS.border}`, display: 'flex', flexDirection: 'column', transition: 'width 0.25s ease', overflow: 'hidden', flexShrink: 0 }}>
+    <aside style={{ width: open ? 240 : 68, background: COLORS.card, borderRight: `1px solid ${COLORS.border}`, display: 'flex', flexDirection: 'column', transition: 'width 0.25s ease', position: 'sticky', top: 0, height: '100vh', alignSelf: 'flex-start', overflow: 'hidden', flexShrink: 0 }}>
       <div style={{ padding: open ? '24px 20px 16px' : '24px 12px 16px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: `1px solid ${COLORS.border}` }}>
         <div style={{ width: 36, height: 36, background: `linear-gradient(135deg,${COLORS.blue},${COLORS.cyan})`, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <Icon name="stores" size={18} />
