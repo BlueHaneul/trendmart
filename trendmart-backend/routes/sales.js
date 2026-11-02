@@ -5,7 +5,20 @@ const { logAction } = require('../middleware/audit');
 const router  = express.Router();
 
 // ── LIST / FILTER (FR-07) ──────────────────────────────────────────────────
-router.get('/', protect , requireRole('Manager', 'Staff'), async (req, res) => {
+// Optional, combinable filters: start_date, end_date, date, product (partial text), category,
+// store_id (Manager only; Staff are always limited to their own store), status.
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+router.get('/', protect, requireRole('Manager', 'Staff'), async (req, res) => {
+  const { date, start_date, end_date, product, category, store_id, status } = req.query;
+
+  for (const [name, value] of Object.entries({ date, start_date, end_date })) {
+    if (value && !DATE_RE.test(value))
+      return res.status(400).json({ message: `${name} must be a date in YYYY-MM-DD format.` });
+  }
+  if (start_date && end_date && start_date > end_date)
+    return res.status(400).json({ message: 'start_date must be on or before end_date.' });
+
   try {
     let query = `
       SELECT t.transaction_id, t.transaction_date, t.total_amount, t.status,
@@ -20,24 +33,29 @@ router.get('/', protect , requireRole('Manager', 'Staff'), async (req, res) => {
     `;
     const params = [];
 
-    // Role restriction: Staff can only search/filter transactions from their own store
+    // Role restriction: Staff only ever see their own store, whatever store_id they send
     if (req.user.role === 'Staff') {
       if (!req.user.assigned_store_id)
-        return res.status(403).json({ message: 'Your account has no assigned store. Contact an Admin.' });
+        return res.status(403).json({ message: 'Your account has no assigned store. Contact a System Administrator.' });
       query += ' AND t.store_id = ?';
       params.push(req.user.assigned_store_id);
-    } else if (req.query.store_id) {
-      // Manager may optionally filter to a specific store too
+    } else if (store_id) {
       query += ' AND t.store_id = ?';
-      params.push(req.query.store_id);
+      params.push(store_id);
     }
 
-    if (req.query.date)   { query += ' AND DATE(t.transaction_date) = ?'; params.push(req.query.date); }
-    if (req.query.status) { query += ' AND t.status = ?'; params.push(req.query.status); }
+    if (date)       { query += ' AND DATE(t.transaction_date) = ?'; params.push(date); }
+    // Range filters compare the raw column (no DATE() wrapper) so MySQL can use the date index
+    if (start_date) { query += ' AND t.transaction_date >= ?'; params.push(start_date); }
+    if (end_date)   { query += ' AND t.transaction_date < DATE_ADD(CAST(? AS DATE), INTERVAL 1 DAY)'; params.push(end_date); }
+    // Partial, case-insensitive product match; % and _ typed by the user are matched literally
+    if (product)    { query += ' AND p.product_name LIKE ?'; params.push(`%${String(product).replace(/[\\%_]/g, '\\$&')}%`); }
+    if (category)   { query += ' AND p.category = ?'; params.push(category); }
+    if (status)     { query += ' AND t.status = ?'; params.push(status); }
 
     query += ' ORDER BY t.transaction_date DESC';
     const [rows] = await db.execute(query, params);
-    res.json(rows); // empty array → frontend shows EmptyState, not an error
+    res.json(rows); // an empty array is a valid result: the frontend shows an empty state, not an error
   } catch (err) {
     res.status(500).json({ message: 'Could not load transactions.' });
   }
