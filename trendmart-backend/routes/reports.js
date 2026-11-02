@@ -3,28 +3,31 @@ const db      = require('../config/db');
 const { protect, requireRole } = require('../middleware/auth');
 const router  = express.Router();
 
-// ── (a) DAILY SALES REPORT — Manager: any store; Staff: own store only ─────────
+// ── (a) DAILY SALES REPORT — Manager: all stores; Staff: own store only ───────
 router.get('/daily', protect, requireRole('Manager', 'Staff'), async (req, res) => {
   const date = req.query.date || new Date().toISOString().slice(0, 10);
   try {
+    // FR-05: a deactivated store stays in the report whenever it has sales on that date
     let query = `
-      SELECT s.store_id, s.store_name, COUNT(DISTINCT t.transaction_id) AS transaction_count,
+      SELECT s.store_id,
+             CASE WHEN s.is_active = 1 THEN s.store_name ELSE CONCAT(s.store_name, ' (inactive)') END AS store_name,
+             COUNT(DISTINCT t.transaction_id) AS transaction_count,
              COALESCE(SUM(t.total_amount), 0) AS total_revenue
       FROM Stores s
       LEFT JOIN SaleTransactions t
         ON t.store_id = s.store_id AND DATE(t.transaction_date) = ? AND t.status = 'Completed'
-      WHERE s.is_active = 1
+      WHERE (s.is_active = 1 OR t.transaction_id IS NOT NULL)
     `;
     const params = [date];
 
     if (req.user.role === 'Staff') {
       if (!req.user.assigned_store_id)
-        return res.status(403).json({ message: 'Your account has no assigned store. Contact an Admin.' });
+        return res.status(403).json({ message: 'Your account has no assigned store. Contact a System Administrator.' });
       query += ' AND s.store_id = ?';
       params.push(req.user.assigned_store_id);
     }
 
-    query += ' GROUP BY s.store_id, s.store_name ORDER BY s.store_name';
+    query += ' GROUP BY s.store_id, s.store_name, s.is_active ORDER BY s.store_name';
     const [rows] = await db.execute(query, params);
     res.json({ date, stores: rows });
   } catch (err) {
@@ -58,8 +61,7 @@ router.get('/best-sellers', protect, requireRole('Manager'), async (req, res) =>
 });
 
 // ── (c) STORE PERFORMANCE REPORT (Manager only) ────────────────────────────────
-// Uses the composite index idx_st_store_date from Part 3 — this is the query
-// that index was purpose-built for.
+// Uses the composite index idx_st_store_date from Part 3 — this is the query that index was purpose-built for.
 router.get('/store-performance', protect, requireRole('Manager'), async (req, res) => {
   const { start_date, end_date } = req.query;
   if (!start_date || !end_date)
@@ -67,7 +69,8 @@ router.get('/store-performance', protect, requireRole('Manager'), async (req, re
 
   try {
     const [rows] = await db.execute(
-      `SELECT s.store_id, s.store_name,
+      `SELECT s.store_id,
+              CASE WHEN s.is_active = 1 THEN s.store_name ELSE CONCAT(s.store_name, ' (inactive)') END AS store_name,
               COUNT(t.transaction_id) AS transaction_count,
               COALESCE(SUM(t.total_amount), 0) AS total_revenue,
               COALESCE(AVG(t.total_amount), 0) AS avg_transaction_value
@@ -75,8 +78,8 @@ router.get('/store-performance', protect, requireRole('Manager'), async (req, re
        LEFT JOIN SaleTransactions t
          ON t.store_id = s.store_id AND t.status = 'Completed'
          AND DATE(t.transaction_date) BETWEEN ? AND ?
-       WHERE s.is_active = 1
-       GROUP BY s.store_id, s.store_name
+       WHERE (s.is_active = 1 OR t.transaction_id IS NOT NULL)
+       GROUP BY s.store_id, s.store_name, s.is_active
        ORDER BY total_revenue DESC`,
       [start_date, end_date]
     );
@@ -86,7 +89,7 @@ router.get('/store-performance', protect, requireRole('Manager'), async (req, re
   }
 });
 
-// ── DASHBOARD (FR-08) — Manager only ────────────────────────────────────────────
+// ── DASHBOARD (FR-08) — Manager only ──────────────────────────────────────────
 router.get('/dashboard', protect, requireRole('Manager'), async (req, res) => {
   try {
     const [[todayRevenue]] = await db.execute(
@@ -112,21 +115,33 @@ router.get('/dashboard', protect, requireRole('Manager'), async (req, res) => {
        GROUP BY p.product_id, p.product_name
        ORDER BY revenue DESC LIMIT 5`
     );
+    // FR-08(f): per-store revenue for TODAY (a deactivated store appears only if it sold today)
     const [perStoreRevenue] = await db.execute(
-      `SELECT s.store_name, COALESCE(SUM(t.total_amount),0) AS revenue
+      `SELECT CASE WHEN s.is_active = 1 THEN s.store_name ELSE CONCAT(s.store_name, ' (inactive)') END AS store_name,
+              COALESCE(SUM(t.total_amount), 0) AS revenue
        FROM Stores s
-       LEFT JOIN SaleTransactions t ON t.store_id = s.store_id AND t.status='Completed'
-       WHERE s.is_active = 1
-       GROUP BY s.store_id, s.store_name ORDER BY revenue DESC`
+       LEFT JOIN SaleTransactions t
+         ON t.store_id = s.store_id AND t.status = 'Completed' AND DATE(t.transaction_date) = CURDATE()
+       WHERE (s.is_active = 1 OR t.transaction_id IS NOT NULL)
+       GROUP BY s.store_id, s.store_name, s.is_active
+       ORDER BY revenue DESC, s.store_name`
+    );
+    // FR-04 / FR-08(g): active products at or below their minimum stock level
+    const [lowStock] = await db.execute(
+      `SELECT product_id, product_name, category, stock_level, min_stock_level
+       FROM Products
+       WHERE is_active = 1 AND stock_level <= min_stock_level
+       ORDER BY stock_level ASC, product_name ASC`
     );
 
     res.json({
       today_revenue: todayRevenue.revenue,
       today_transaction_count: todayRevenue.tx_count,
       all_time_revenue: allTimeRevenue.revenue,
-      seven_day_trend: sevenDayTrend,     // → bar chart (SC-02)
+      seven_day_trend: sevenDayTrend,
       top_products: topProducts,
       per_store_revenue: perStoreRevenue,
+      low_stock: lowStock,
     });
   } catch (err) {
     res.status(500).json({ message: 'Could not load dashboard data.' });
