@@ -8,6 +8,29 @@ const { logAction } = require('../middleware/audit');
 const { protect, requireRole }   = require('../middleware/auth');
 const router    = express.Router();
 
+// ── FR-01: account lockout ────────────────────────────────────────────────────
+const MAX_FAILED_ATTEMPTS = 5;   // consecutive failures allowed
+const LOCK_MINUTES        = 15;  // how long the account stays locked
+
+// Records one failed attempt and locks the account when the limit is reached.
+// Returns true if this failure triggered the lock. Lock times come from MySQL's NOW(),
+// the same clock that checks them later, so the two can never disagree.
+async function recordFailedAttempt(user) {
+  const attempts = user.failed_login_attempts + 1;
+  if (attempts >= MAX_FAILED_ATTEMPTS) {
+    await db.execute(
+      `UPDATE Users SET failed_login_attempts = 0, locked_until = DATE_ADD(NOW(), INTERVAL ${LOCK_MINUTES} MINUTE)
+       WHERE user_id = ?`, [user.user_id]
+    );
+    return true;
+  }
+  await db.execute('UPDATE Users SET failed_login_attempts = ? WHERE user_id = ?', [attempts, user.user_id]);
+  return false;
+}
+
+const lockedMessage = (minutes) => `Account locked after too many failed attempts. Try again in ${minutes} minute(s).`;
+
+
 // ── LOGIN ─────────────────────────────────────────────────────────────────────
 router.post('/login', async (req, res) => {
   const { username, password, mfa_code } = req.body;
@@ -16,38 +39,51 @@ router.post('/login', async (req, res) => {
 
   try {
     const [rows] = await db.execute(
-      'SELECT * FROM Users WHERE username = ? AND is_active = 1', [username]
+      `SELECT *,
+              (locked_until IS NOT NULL AND locked_until > NOW()) AS is_locked,
+              CEIL(TIMESTAMPDIFF(SECOND, NOW(), locked_until) / 60) AS minutes_left
+       FROM Users WHERE username = ? AND is_active = 1`, [username]
     );
 
     if (rows.length === 0) {
       await logAction(req, { action: 'LOGIN_ATTEMPT', result: 'FAILURE' });
-      // Return a generic message — do not reveal whether username exists (security best practice)
+      // Generic message: do not reveal whether the username exists
       return res.status(401).json({ message: 'Invalid username or password.' });
     }
 
     const user = rows[0];
-    const isMatch = await bcrypt.compare(password, user.password_hash);
 
+    // A locked account is refused even when the credentials are correct
+    if (user.is_locked) {
+      await logAction(req, { userId: user.user_id, action: 'LOGIN_ATTEMPT', result: 'BLOCKED' });
+      return res.status(423).json({ message: lockedMessage(Number(user.minutes_left)) });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
+      const nowLocked = await recordFailedAttempt(user);
       await logAction(req, { userId: user.user_id, action: 'LOGIN_ATTEMPT', result: 'FAILURE' });
-      return res.status(401).json({ message: 'Invalid username or password.' });
+      return nowLocked
+        ? res.status(423).json({ message: lockedMessage(LOCK_MINUTES) })
+        : res.status(401).json({ message: 'Invalid username or password.' });
     }
 
     // ── MFA CHECK ────────────────────────────────────────────────────────────
     if (user.mfa_enabled) {
       if (!mfa_code) {
-        // Password correct but MFA required — tell client to prompt for code
+        // Password correct but MFA required: not a failure, so the counter is untouched
         return res.status(200).json({ mfa_required: true, message: 'Enter your MFA code.' });
       }
       const mfaValid = speakeasy.totp.verify({
-        secret:   user.mfa_secret,
-        encoding: 'base32',
-        token:    mfa_code,
-        window:   1, // allow 30 seconds of clock drift
+        secret: user.mfa_secret, encoding: 'base32', token: mfa_code, window: 1,
       });
       if (!mfaValid) {
+        // A wrong MFA code is also a failed attempt, otherwise the 6-digit code could be brute-forced
+        const nowLocked = await recordFailedAttempt(user);
         await logAction(req, { userId: user.user_id, action: 'LOGIN_ATTEMPT', result: 'FAILURE' });
-        return res.status(401).json({ message: 'Invalid MFA code.' });
+        return nowLocked
+          ? res.status(423).json({ message: lockedMessage(LOCK_MINUTES) })
+          : res.status(401).json({ message: 'Invalid MFA code.' });
       }
     }
 
@@ -59,7 +95,11 @@ router.post('/login', async (req, res) => {
       { expiresIn: process.env.JWT_EXPIRES_IN }
     );
 
-    await db.execute('UPDATE Users SET last_login = NOW() WHERE user_id = ?', [user.user_id]);
+    // A full, successful login clears the failure counter and any lock
+    await db.execute(
+      'UPDATE Users SET last_login = NOW(), failed_login_attempts = 0, locked_until = NULL WHERE user_id = ?',
+      [user.user_id]
+    );
     await logAction(req, { userId: user.user_id, action: 'LOGIN_ATTEMPT', result: 'SUCCESS' });
 
     res.json({
@@ -140,8 +180,9 @@ function requireRoleInline(role) {
 // ── LIST USERS (SystemAdmin only) — powers the User Management screen ────────
 router.get('/users', protect, requireRoleInline('SystemAdmin'), async (req, res) => {
   const [rows] = await db.execute(
-    `SELECT user_id, username, full_name, role, email, assigned_store_id, is_active, mfa_enabled, last_login
-     FROM Users ORDER BY full_name`
+    `SELECT user_id, username, full_name, role, email, assigned_store_id, is_active, mfa_enabled, last_login,
+        (locked_until IS NOT NULL AND locked_until > NOW()) AS is_locked
+    FROM Users ORDER BY full_name`
   );
   res.json(rows);
 });
@@ -155,7 +196,10 @@ router.put('/users/:id/password', protect, requireRoleInline('SystemAdmin'), asy
 
   try {
     const password_hash = await bcrypt.hash(new_password, 12);
-    const [result] = await db.execute('UPDATE Users SET password_hash = ? WHERE user_id = ?', [password_hash, req.params.id]);
+    const [result] = await db.execute(
+  'UPDATE Users SET password_hash = ?, failed_login_attempts = 0, locked_until = NULL WHERE user_id = ?',
+  [password_hash, req.params.id]
+);
     if (result.affectedRows === 0) return res.status(404).json({ message: 'User not found.' });
 
     await logAction(req, { userId: req.user.user_id, action: 'RESET_PASSWORD', targetType: 'User', targetId: req.params.id, result: 'SUCCESS' });

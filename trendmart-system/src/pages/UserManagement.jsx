@@ -83,7 +83,7 @@ export default function UserManagement() {
               <td style={{ padding: '10px 16px' }}>{u.username}</td>
               <td style={{ padding: '10px 16px' }}><Badge color={COLORS.violet}>{u.role}</Badge></td>
               <td style={{ padding: '10px 16px' }}>{u.mfa_enabled ? <Badge color={COLORS.emerald}>On</Badge> : <Badge color={COLORS.dim}>Off</Badge>}</td>
-              <td style={{ padding: '10px 16px' }}>{u.is_active ? <Badge color={COLORS.emerald}>Active</Badge> : <Badge color={COLORS.dim}>Inactive</Badge>}</td>
+              <td style={{ padding: '10px 16px' }}>{!u.is_active ? <Badge color={COLORS.dim}>Inactive</Badge>: u.is_locked ? <Badge color={COLORS.rose}>Locked</Badge>: <Badge color={COLORS.emerald}>Active</Badge>}</td>
               <td style={{ padding: '10px 16px', display: 'flex', gap: 10 }}>
                 <button onClick={() => setPwUser(u)} style={{ background: 'none', border: 'none', color: COLORS.cyan, cursor: 'pointer', fontSize: 12 }}>Reset Password</button>
                 <button onClick={() => toggleActive(u)} style={{ background: 'none', border: 'none', color: u.is_active ? COLORS.rose : COLORS.emerald, cursor: 'pointer', fontSize: 12 }}>
