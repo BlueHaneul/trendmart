@@ -72,7 +72,7 @@ const Table = ({ columns, rows }) => (
 
 function DailyReport() {
   const { user } = useAuth();
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
 
