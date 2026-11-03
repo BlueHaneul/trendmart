@@ -76,6 +76,12 @@ router.post('/', protect , requireRole('Manager', 'Staff'), async (req, res) => 
   const conn = await db.getConnection();
   try {
     await conn.beginTransaction(); // ACID: Atomicity begins
+  
+  // A deactivated (or unknown) store cannot take new sales, whoever is selling
+  const [[store]] = await conn.execute('SELECT is_active FROM Stores WHERE store_id = ?', [store_id]);
+  if (!store) throw { status: 404, message: 'Store not found.' };
+  if (!store.is_active) throw { status: 409, message: 'This store is deactivated. New sales cannot be recorded for it.' };
+
 
     // Acquire row-level lock — prevents double-deduction (TI-02: concurrency control)
     const [[product]] = await conn.execute(

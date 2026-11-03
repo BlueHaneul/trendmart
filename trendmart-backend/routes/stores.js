@@ -87,4 +87,18 @@ router.delete('/:id', protect, requireRole('Manager'), async (req, res) => {
   }
 });
 
+// ── REACTIVATE (Manager only) — the counterpart to the soft delete above ──────
+router.patch('/:id/activate', protect, requireRole('Manager'), async (req, res) => {
+  try {
+    const [result] = await db.execute('UPDATE Stores SET is_active = 1 WHERE store_id = ?', [req.params.id]);
+    if (result.affectedRows === 0) return res.status(404).json({ message: 'Store not found.' });
+
+    await logAction(req, { userId: req.user.user_id, action: 'REACTIVATE_STORE',
+                            targetType: 'Store', targetId: req.params.id, result: 'SUCCESS' });
+    res.json({ message: 'Store reactivated.' });
+  } catch (err) {
+    res.status(500).json({ message: 'Could not reactivate store.' });
+  }
+});
+
 module.exports = router;
