@@ -144,7 +144,7 @@ router.put('/:id/cancel', protect, requireRole('Manager', 'Staff'), async (req, 
     // "Today's" rule: cancellation is only permitted on the day the sale was made
     const txDate = new Date(tx.transaction_date).toDateString();
     const today   = new Date().toDateString();
-    if (req.user.role === 'Staff' && txDate !== today)
+    if (txDate !== today)
       throw { status: 403, message: 'Only transactions from today can be cancelled.' };
 
     // Restore stock for every item in the transaction, then mark it cancelled —
