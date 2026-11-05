@@ -1,0 +1,28 @@
+TrendMart performance check (NFR-04, FR-07)
+Run: 2026/11/05, 09:03:51
+Backend: http://localhost:5000
+Load: 10 concurrent users x 10 rounds = 750 requests in 11.0 s
+Data: 5290 transactions in the last 180 days (including 5000 synthetic)
+
+Group                Requests   p50 ms   p95 ms   max ms    Target   Result
+Normal requests           330       29      234      325      3000   PASS
+Filtered searches         230       46      256      296      2000   PASS
+Reports                   160       51      172      203     10000   PASS
+Dashboard                  30      148      206      208      2000   PASS
+All requests              750       46      230      325      3000   PASS
+
+Request                               Count   p50 ms   p95 ms   max ms
+Products list                           100       20       38       75
+Stores list                              70       18       62      198
+Sales list (unfiltered)                 100      101      287      325
+Dashboard                                30      148      206      208
+Daily sales report                      100       45      179      203
+Sales: category + 6-month range         100       69      144      171
+Best sellers (6 months)                  30       64       87      129
+Sales: product text + 30 days           100       32       66      167
+Store performance (6 months)             30       49      104      138
+Advanced analytics                       30       90      160      161
+Reorder recommendations                  30       25       33       65
+Sales: 6-month date range                30      241      293      296
+
+Overall: ALL TARGETS MET

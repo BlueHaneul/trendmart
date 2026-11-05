@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
-    "test": "jest --testEnvironment=node --runInBand --forceExit"
+    "test": "jest --testEnvironment=node --runInBand --forceExit",
+    "perf": "node scripts/performance-check.js"
   },
   "keywords": [],
   "author": "",
