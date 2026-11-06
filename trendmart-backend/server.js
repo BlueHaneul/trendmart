@@ -1,6 +1,7 @@
 const express = require('express');
 const cors    = require('cors');
 const db = require('./config/db');
+const { startRetentionJob } = require('./jobs/retention');
 require('dotenv').config();
 
 const app = express();
@@ -38,19 +39,9 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: 'An internal server error occurred.' });
 });
 
-// Run this as a scheduled task (e.g. node-cron) — purges old audit logs
-const cron = require('node-cron');
-cron.schedule('0 2 1 * *', async () => { // 2am on the 1st of each month
-  await db.execute(
-    "DELETE FROM AuditLog WHERE logged_at < DATE_SUB(NOW(), INTERVAL 3 YEAR)"
-  );
-  console.log('Audit log purge completed.');
-});
-
 if (require.main === module) {
-  app.listen(process.env.PORT, () =>
-    console.log(`Server running on port ${process.env.PORT}`)
-  );
+  app.listen(process.env.PORT, () => console.log(`Server running on port ${process.env.PORT}`));
+  startRetentionJob();
 }
 
 module.exports = app; // exported (not just listened on) so tests/sales.test.js can import it with supertest

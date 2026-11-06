@@ -7,7 +7,8 @@
     "dev": "nodemon server.js",
     "start": "node server.js",
     "test": "jest --testEnvironment=node --runInBand --forceExit",
-    "perf": "node scripts/performance-check.js"
+    "perf": "node scripts/performance-check.js",
+    "db:setup": "node scripts/setup-database.js"
   },
   "keywords": [],
   "author": "",
